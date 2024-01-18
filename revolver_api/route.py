@@ -1,8 +1,8 @@
 from functools import wraps
 import inspect
+from os import environ
 from django.http import HttpRequest
 from django.urls import re_path
-from backend import settings
 from revolver_api.revolver_api.utils.get_request_args import  get_instance_from_args_or_kwargs
 from revolver_api.revolver_api.response import ApiErrorCode, ApiJsonResponse
 
@@ -48,7 +48,7 @@ class Router():
                         if next:
                             return func(*args, **kwargs)
                     except Exception as e:
-                        if settings.DEBUG:
+                        if environ.get("DEBUG") == "True":
                             raise e
                         if not exception_json:
                             raise e

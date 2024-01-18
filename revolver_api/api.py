@@ -1,10 +1,10 @@
 from functools import wraps
+from os import environ
 import re
 from typing import Any, Iterable
 from django.http import HttpRequest, JsonResponse
-from backend import settings
+from revolver_api.revolver_api.model import SerializerModel
 from revolver_api.revolver_api.utils.get_request_args import get_instance_from_args_or_kwargs
-from core.models import BaseModel
 from revolver_api.revolver_api.response import ApiErrorCode, ApiJsonResponse
 from revolver_api.revolver_api.route import Router
 
@@ -109,7 +109,7 @@ class Api:
         _type_: _description_
     """
 
-    model: BaseModel
+    model: SerializerModel
 
     rules: Iterable[Rule] = []
 
@@ -318,7 +318,7 @@ class Api:
         try:
             obj = self.model.objects.get(id=id)
         except Exception as e:
-            if settings.DEBUG:
+            if environ.get("DEBUG") == "True":
                 raise e
             return ApiJsonResponse.error(ApiErrorCode.NOT_FOUND,"没有 id 为 "+ id +" 的找到记录")
         return JsonResponse(

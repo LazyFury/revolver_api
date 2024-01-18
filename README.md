@@ -24,21 +24,22 @@ pip install revolver-api
 
 ```python
 # 导入必要的模块和类
-from revolver_api import APIView, Response
+from revolver_api.revolver_api import Router
+
+api = Router("/api")
 
 # 创建API视图类
-class MyAPIView(APIView):
-    def get(self, request):
-        # 处理GET请求的逻辑
-        data = {'message': 'Hello, World!'}
-        return Response(data)
+@api.get("/")
+class MyAPIView(request):
+    data = {'message': 'Hello, World!'}
+    return Response(data)
 
 # 在urls.py文件中添加路由
 from django.urls import path
 from myapp.views import MyAPIView
 
 urlpatterns = [
-    path('myapi/', MyAPIView.as_view(), name='myapi'),
+    path('myapi/', api.urls, name='myapi'),
 ]
 ```
 
