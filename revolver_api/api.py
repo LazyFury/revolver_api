@@ -3,10 +3,10 @@ from os import environ
 import re
 from typing import Any, Iterable
 from django.http import HttpRequest, JsonResponse
-from revolver_api.revolver_api.model import SerializerModel
-from revolver_api.revolver_api.utils.get_request_args import get_instance_from_args_or_kwargs
-from revolver_api.revolver_api.response import ApiErrorCode, ApiJsonResponse
-from revolver_api.revolver_api.route import Router
+from .model import SerializerModel
+from .utils.get_request_args import get_instance_from_args_or_kwargs
+from .response import ApiErrorCode, ApiJsonResponse
+from .route import Router
 
 
 

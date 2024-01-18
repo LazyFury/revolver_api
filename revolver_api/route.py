@@ -3,8 +3,8 @@ import inspect
 from os import environ
 from django.http import HttpRequest
 from django.urls import re_path
-from revolver_api.revolver_api.utils.get_request_args import  get_instance_from_args_or_kwargs
-from revolver_api.revolver_api.response import ApiErrorCode, ApiJsonResponse
+from .utils.get_request_args import  get_instance_from_args_or_kwargs
+from .response import ApiErrorCode, ApiJsonResponse
 
 
 def valid_method_middlewares(method="GET"):
