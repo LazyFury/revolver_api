@@ -1,4 +1,5 @@
 from functools import wraps
+import json
 from os import environ
 import re
 from typing import Any, Iterable
@@ -92,6 +93,8 @@ def validator(rules: Iterable[Rule]=[],method="get"):
                 params = req.GET.dict()
             else:
                 params = req.POST.dict()
+                if req.headers.get("Content-Type") == "application/json":
+                    params = json.loads(req.body)
             
             # print("!!! params:",params)
             for rule in rules:
@@ -268,11 +271,27 @@ class Api:
         # 忽略不在模型中的字段，前端在查询时可能会传入一些不在模型中的字段，这些字段应该被忽略
         for field in model_fields:
             for key in input_fields:
-                if not re.match(f'{field.name}__\w+',key):
-                    pass
+                if not re.match(f'{field.name}(\w+)?$',key):
+                    continue
+                if input_fields[key] == "" or input_fields[key] is None:
+                    continue
                 else:
                     valid_fields[key] = input_fields[key]
-        return self.model.objects.all().filter(**valid_fields).order_by("-created_at")
+                    # trim 
+                    if isinstance(input_fields[key],str):
+                        valid_fields[key] = input_fields[key].strip()
+        
+        query = self.model.objects.all().filter(**valid_fields).order_by("-created_at")
+        
+        order_by_set = request.GET.get("order_by")
+        if order_by_set is not None and order_by_set != "":
+            for order_by in order_by_set.split(","):
+                if order_by.endswith("_desc"):
+                    query = query.order_by("-" + order_by.replace("_desc",""))
+                if order_by.endswith("_asc"):
+                    query = query.order_by(order_by.replace("_asc",""))
+        
+        return query
         
     def list(self, request: HttpRequest, **kwargs):
         if request.method != "GET":
