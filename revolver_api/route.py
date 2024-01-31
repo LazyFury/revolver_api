@@ -52,7 +52,10 @@ class Router():
                             raise e
                         if not exception_json:
                             raise e
-                        return ApiJsonResponse.error(ApiErrorCode.ERROR,str(e))
+                        return ApiJsonResponse.error(ApiErrorCode.ERROR,str(e),{
+                            "file": inspect.getsourcefile(func),
+                            "line": str(func.__code__.co_firstlineno),
+                        })
                     
             # self.urls.append(path(url, inner, name=func.__name__ + name_suffix))
             file = inspect.getsourcefile(func)

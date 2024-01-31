@@ -40,6 +40,7 @@ class ApiJsonResponse(JsonResponse):
         self.status_code = httpCode
         
     def error(code=ApiErrorCode.ERROR,message="错误",data=None,**kwargs):
+        
         return ApiJsonResponse(data,code=code,message=message,httpCode=400,**kwargs)
     
     def success(data=None,message="成功",**kwargs):

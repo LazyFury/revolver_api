@@ -96,12 +96,13 @@ def validator(rules: Iterable[Rule]=[],method="get"):
                 if req.headers.get("Content-Type") == "application/json":
                     params = json.loads(req.body)
             
-            # print("!!! params:",params)
+            print("!!! params:",params)
             for rule in rules:
                 value = params.get(rule.name)
                 if rule.required and value is None or value == "":
                     return ApiJsonResponse(None,code=ApiErrorCode.ERROR,message=rule.message)
-                
+            
+            print("validator",func.__name__)
             return func(*args,**kwargs)
         return inner
     return wrapper
