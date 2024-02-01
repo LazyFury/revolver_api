@@ -117,7 +117,10 @@ class Api:
 
     rules: Iterable[Rule] = []
 
-
+    # filter only self if not superuser
+    is_supperuser = True
+    public_view = False
+    
     class Validator:
         is_valid = True
         errors = {}
