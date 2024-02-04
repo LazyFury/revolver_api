@@ -87,14 +87,20 @@ def validator(rules: Iterable[Rule]=[],method="get"):
     def wrapper(func):
         @wraps(func)
         def inner(*args,**kwargs):
-            req = get_instance_from_args_or_kwargs(HttpRequest,args,kwargs)
+            try:
+                req = get_instance_from_args_or_kwargs(HttpRequest,args,kwargs)
+            except Exception as e:
+                return ApiJsonResponse.error(ApiErrorCode.ERROR,e.__str__())
             params = {}
             if method.lower() == 'get':
                 params = req.GET.dict()
             else:
                 params = req.POST.dict()
                 if req.headers.get("Content-Type") == "application/json":
-                    params = json.loads(req.body)
+                    try:
+                        params = json.loads(req.body)
+                    except Exception as e:
+                        return ApiJsonResponse.error(ApiErrorCode.ERROR,"json 解析错误")
             
             print("!!! params:",params)
             for rule in rules:
@@ -103,6 +109,7 @@ def validator(rules: Iterable[Rule]=[],method="get"):
                     return ApiJsonResponse(None,code=ApiErrorCode.ERROR,message=rule.message)
             
             print("validator",func.__name__)
+            req.valid_data = params
             return func(*args,**kwargs)
         return inner
     return wrapper
