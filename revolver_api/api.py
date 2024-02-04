@@ -1,16 +1,17 @@
+from calendar import c
+import datetime
 from functools import wraps
 import json
 from os import environ
 import re
 from typing import Any, Iterable
-from django.http import HttpRequest, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from .model import SerializerModel
 from .utils.get_request_args import get_instance_from_args_or_kwargs
 from .response import ApiErrorCode, ApiJsonResponse
 from .route import Router
-
-
-
+from core import config
+from django.db import models
 
 def errorHandler(json=True):
     """api 错误处理
@@ -336,6 +337,71 @@ class Api:
             },
             message="获取成功",
         )
+    
+    
+    @staticmethod
+    def export_csv_override(query:models.QuerySet,request:HttpRequest):
+        """导出csv
+
+        Args:
+            query (models.QuerySet): _description_
+            request (HttpRequest): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        from xlwt import Workbook,easyxf,add_palette_colour
+        work = Workbook()
+        add_palette_colour("custom_colour", 0x21)
+        work.set_colour_RGB(0x21, 235, 235, 235)
+        
+        header_style = easyxf('pattern: pattern solid, fore_colour custom_colour;\
+            borders: left thin, right thin, top thin, bottom thin;\
+            font: bold 1,height 240;')
+        
+        
+        model = query.model
+        name = request.GET.get("name") or model.__name__.lower() + "_export_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M"))
+        file_name = name + ".xls"
+        file_path = config.cache_dir("export_xls") / file_name
+        print("export_csv",file_path)
+        try:
+            sheet = work.add_sheet("sheet1")
+            data = []
+            for obj in query:
+                data.append(obj)
+            if len(data) == 0:
+                return ApiJsonResponse.error(ApiErrorCode.NOT_FOUND,"没有找到记录")
+            fields = list(data[0].to_json().keys())
+            
+            sorted_fields = sorted(fields,key=lambda k:model.xls_sort_key(k) )
+            
+            for i,field in enumerate(sorted_fields):
+                obj = data[0]
+                remark = model.get_json_key_remark(obj,field)
+                width = len(remark) * 400
+                width = max(width,3600)
+                sheet.col(i).width = width
+                # sheet.write(0,i,remark,header_style)
+                sheet.write(0,i,remark,header_style)
+            for i,obj in enumerate(data):
+                row = obj.to_json()
+                row_style = easyxf('font: height 320;')
+                sheet.row(i+1).set_style(row_style)
+                for j,field in enumerate(sorted_fields):
+                    val = obj.to_xls_format(row,field)
+                    sheet.write(i+1,j,val)
+            work.save(file_path)
+        except Exception as e:
+            return ApiJsonResponse.error(ApiErrorCode.ERROR,e.__str__())
+        with open(file_path,"rb") as f:
+            response = HttpResponse(f,content_type="application/vnd.ms-excel")
+            response['Content-Disposition'] = 'attachment; filename="export.xls"'
+            return response
+        
+    def export_csv(self,request: HttpRequest):
+        query = self.defaultQuery(request)
+        return self.export_csv_override(query,request)
 
     @validator([
         Rule(name="id", required=True, message="id不能为空"),
@@ -393,4 +459,5 @@ class Api:
         router.get(baseUrl + '.detail',middlewares=middlewares)(self.detail)
         router.delete(baseUrl + '.delete',middlewares=middlewares)(self.delete)
         router.put(baseUrl + '.update',middlewares=middlewares)(self.update)
+        router.get(baseUrl + '.export',middlewares=middlewares)(self.export_csv)
     

@@ -1,18 +1,68 @@
+import datetime
+import time
 from django.db import models
 from logging import warn
+
+from django.http import HttpRequest, HttpResponse
+
+from core import config
+from revolver_api.revolver_api.response import ApiErrorCode, ApiJsonResponse
 
 
 
 class SerializerModel(models.Model):
     class Meta:
         abstract = True
-        
+
     def convert(self,obj):
         # warn("【You should override this method】 convert %s" % obj,)
+        # bool 
+        if isinstance(obj,bool):
+            return obj
+        # int
+        if isinstance(obj,int):
+            return obj
+        # none 
+        if obj is None:
+            return obj
         return obj if isinstance(obj,str) else obj.__str__()
     
     def to_json(self, *args, **kwargs):
         return self.sample_to_json(*args, **kwargs)
+    
+    def json_key_remark(self):
+        return {
+            "id": "ID",
+            "created_at": "创建时间",
+            "updated_at": "更新时间",
+            "is_deleted": "是否删除",
+        }
+    
+    @staticmethod
+    def to_xls_format(obj,key):
+        if key not in obj:
+            return "-"
+        val = obj.get(key,"/")
+        if isinstance(val,datetime.datetime):
+            return val.strftime("%Y-%m-%d %H:%M:%S")
+        if isinstance(val,datetime.date):
+            return val.strftime("%Y-%m-%d")
+        # bool 
+        if isinstance(val,bool):
+            return "是" if val else "否"
+        return val.__str__() if val is not None and val != "" else "/"
+    
+    def get_json_key_remark(self, key):
+        return self.json_key_remark().get(key, key)
+    
+    @staticmethod
+    def xls_sort_key(key):
+        return {
+            "id": 0,
+            "created_at": 1,
+            "updated_at": 2,
+            "is_deleted": 3,
+        }.get(key, 999)
 
     def loop_all_self_attr(
         self, with_foreign=True, with_related=False, related_serializer=False
