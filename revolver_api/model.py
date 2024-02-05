@@ -1,13 +1,6 @@
 import datetime
-import time
 from django.db import models
 from logging import warn
-
-from django.http import HttpRequest, HttpResponse
-
-from core import config
-from revolver_api.revolver_api.response import ApiErrorCode, ApiJsonResponse
-
 
 
 class SerializerModel(models.Model):
@@ -50,10 +43,19 @@ class SerializerModel(models.Model):
         # bool 
         if isinstance(val,bool):
             return "是" if val else "否"
-        return val.__str__() if val is not None and val != "" else "/"
+        # num 
+        if isinstance(val,int):
+            return val
+        if isinstance(val,float):
+            return val
+        if isinstance(val,str):
+            return val if val != "" else "/"
+        return val.__str__() if val is not None else "/"
     
     def get_json_key_remark(self, key):
         return self.json_key_remark().get(key, key)
+
+    
     
     @staticmethod
     def xls_sort_key(key):

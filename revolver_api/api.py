@@ -338,6 +338,11 @@ class Api:
             message="获取成功",
         )
     
+        
+    
+    @staticmethod
+    def get_fields(model:SerializerModel):
+        return model.objects.first().to_json().keys()
     
     @staticmethod
     def export_csv_override(query:models.QuerySet,request:HttpRequest):
@@ -372,7 +377,7 @@ class Api:
                 data.append(obj)
             if len(data) == 0:
                 return ApiJsonResponse.error(ApiErrorCode.NOT_FOUND,"没有找到记录")
-            fields = list(data[0].to_json().keys())
+            fields = list(Api.get_fields(model))
             
             sorted_fields = sorted(fields,key=lambda k:model.xls_sort_key(k) )
             
