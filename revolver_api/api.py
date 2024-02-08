@@ -1,10 +1,10 @@
-from calendar import c
 import datetime
 from functools import wraps
 import json
 from os import environ
 import re
 from typing import Any, Iterable
+from attr import has
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from .model import SerializerModel
 from .utils.get_request_args import get_instance_from_args_or_kwargs
@@ -12,6 +12,7 @@ from .response import ApiErrorCode, ApiJsonResponse
 from .route import Router
 from core import config
 from django.db import models
+from django.contrib.auth.models import AbstractUser
 
 def errorHandler(json=True):
     """api 错误处理
@@ -125,9 +126,89 @@ class Api:
 
     rules: Iterable[Rule] = []
 
-    # filter only self if not superuser
-    is_supperuser = True
+
     public_view = False
+    user_field = "user"
+    
+    @property
+    def shoud_find_by_user(self):
+        """ 是否应该根据用户 id 查询
+
+        Returns:
+            _type_: _description_
+        """
+        foreign_leys = [f for f in self.model._meta.get_fields() if f.is_relation]
+        for f in foreign_leys:
+            if isinstance(f.related_model(),AbstractUser):
+                return True
+        return False
+    
+    def is_supperuser(self,request: HttpRequest):
+        """是否是后台管理员
+
+        Args:
+            request (HttpRequest): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        return request.user and request.user.is_superuser
+    
+    
+    def find_by_user_query(self,query: models.QuerySet,user:AbstractUser)->models.QuerySet:
+        """查找用户外键的方法
+
+        Args:
+            query (models.QuerySet): _description_
+            user (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        data = {
+            self.user_field:user
+        }
+        return query.filter(**data)
+    
+    def find_by_user(self,query: models.QuerySet,request: HttpRequest,view_only=False)->models.QuerySet:
+        """判断是否应该根据用户 id 查询
+
+        Args:
+            query (models.QuerySet): _description_
+            request (HttpRequest): _description_
+            view_only (bool, optional): _description_. Defaults to False.
+
+        Returns:
+            _type_: _description_
+        """
+        if self.is_supperuser(request):
+            return query
+        if view_only and self.public_view:
+            return query
+        if self.shoud_find_by_user:
+            print("根据用户查询",query)
+            return self.find_by_user_query(query=query,user=request.user)
+        else:
+            print("不公开数据，且当前用户也没有权限",query)
+            return query.filter(pk=-1)
+        
+    def auto_save_with_user(self,request: HttpRequest, obj: models.Model):
+        """自动保存用户
+
+        Args:
+            request (HttpRequest): _description_
+            obj (models.Model): _description_
+        """
+        if self.shoud_find_by_user:
+            print("has user field",hasattr(obj,"user"))
+            print("user",request.user)
+            # superuser 在后台手动选择用户时，不会自动保存用户
+            if self.is_supperuser(request):
+                if (hasattr(obj,"user") is False or getattr(obj,"user") is None):
+                    setattr(obj,"user",request.user)
+            else:
+                setattr(obj,"user",request.user)
+        obj.save()
     
     class Validator:
         is_valid = True
@@ -142,7 +223,7 @@ class Api:
             self.is_valid = False
             self.errors[key] = value
 
-    def validate(self, request: HttpRequest, **kwargs):
+    def validate(self, request: HttpRequest, data=None,**kwargs):
         """### 提交数据验证
 
         Args:
@@ -154,7 +235,7 @@ class Api:
         print(self.model, "validate")
         validator = self.Validator()
         for rule in self.rules:
-            value = request.POST.get(rule.name)
+            value = data or request.POST.get(rule.name)
             if rule.required is True and (value is None or value == ""):
                 validator.add_error(
                     rule.name, rule.message if rule.message else "required"
@@ -198,23 +279,33 @@ class Api:
         """
         if request.method != "POST":
             return JsonResponse({"error": "only support POST"})
+        
+        if not self.is_supperuser(request=request):
+            if self.shoud_find_by_user and (request.user is None or request.user.is_anonymous):
+                return ApiJsonResponse.error(ApiErrorCode.ERROR,"没有权限")
+        
         print(self.model, "createApi")
-        validator = self.validate(request, **kwargs)
+        try:
+            data = json.loads(request.body)
+        except Exception as e:
+            return ApiJsonResponse.error(ApiErrorCode.ERROR,e.__str__())
+        validator = self.validate(request,data=data, **kwargs)
         if validator.is_valid is False:
-            return JsonResponse(
-                {
-                    "code": 400,
-                    "msg": "validate error",
-                    "tips": validator.tips if validator.tips else "",
+            return ApiJsonResponse.error(
+                data={
                     "errors": validator.errors,
-                }
+                },
+                message= validator.tips if validator.tips else "",
             )
         try:
-            dict = request.POST.dict()
-            del dict["id"]
+            dict = data
+            if id in dict:
+                del dict["id"]
+            
             obj = self.model.objects.create(**dict)
+            self.auto_save_with_user(request, obj)
         except Exception as e:
-            return JsonResponse({"error": str(e)})
+            return ApiJsonResponse.error(ApiErrorCode.ERROR,e.__str__())
         return JsonResponse(
             {
                 "status": "success",
@@ -232,39 +323,36 @@ class Api:
         Returns:
             _type_: _description_
         """
-        if request.method != "POST":
-            return JsonResponse({"error": "only support POST"})
-        # print(self.model, "createApi")
-        validator = self.validate(request, **kwargs)
+        try:
+            data = json.loads(request.body)
+        except Exception as e:
+            return ApiJsonResponse.error(data={},message=e.__str__() or "json 解析错误")
+        validator = self.validate(request,data=data, **kwargs)
         if validator.is_valid is False:
-            return JsonResponse(
-                {
-                    "code": 400,
-                    "msg": "validate error",
-                    "tips": validator.tips if validator.tips else "",
+            return ApiJsonResponse.error(
+                data={
                     "errors": validator.errors,
-                }
+                },
+                message= validator.tips if validator.tips else "",
             )
-        id = request.POST.get("id")
+        id = data.get("id")
         if id is None or id == "":
-            return JsonResponse({"error": "id is required"})
-        obj = self.model.objects.filter(pk=id).first()
+            return ApiJsonResponse.error(ApiErrorCode.ERROR,"id 不能为空")
+        query = self.find_by_user(query=self.model.objects.filter(pk=id),request=request)
+        print("update",query.count())
+        # .first()
+        obj = query.first()
+        print("update",obj)
+        
         if obj is None:
-            return JsonResponse({"error": "not found"})
-        for key in request.POST.dict():
-            setattr(obj, key, request.POST.dict()[key])
+            return ApiJsonResponse.error(ApiErrorCode.NOT_FOUND,"无法更新/没有权限")
+        for key in obj.fillable():
+            setattr(obj, key, data.get(key))
         try:
             obj.save()
         except Exception as e:
-            return JsonResponse({"error": str(e)})
-        return JsonResponse(
-            {
-                "status": "success",
-                "code": 200,
-                "msg": "update success",
-                "data": obj.to_json(),
-            }
-        )
+            return ApiJsonResponse.error(ApiErrorCode.ERROR,e.__str__())
+        return ApiJsonResponse.success(obj.to_json())
         
     def defaultQuery(self,request: HttpRequest):
         """### 默认查询
@@ -303,7 +391,7 @@ class Api:
                 if order_by.endswith("_asc"):
                     query = query.order_by(order_by.replace("_asc",""))
         
-        return query
+        return self.find_by_user(query,request=request,view_only=True)
         
     def list(self, request: HttpRequest, **kwargs):
         if request.method != "GET":
@@ -417,7 +505,7 @@ class Api:
         id = request.GET.get("id")
         # print(self.model, "get_one",id)
         try:
-            obj = self.model.objects.get(id=id)
+            obj = self.find_by_user(self.model.objects.filter(pk=id),request=request).first()
         except Exception as e:
             if environ.get("DEBUG") == "True":
                 raise e
@@ -430,22 +518,23 @@ class Api:
             }
         )
 
+    @validator([
+        Rule(name="ids",message="ids 必传！")
+    ])
     def delete(self, request: HttpRequest):
-        id = request.GET.get("id")
+        data = json.loads(request.body)
+        ids = data.get("ids",[])
         if request.method != "DELETE":
-            return JsonResponse({"error": "only support DELETE"})
-        print(self.model, "deleteApi")
-        obj = self.model.objects.get(id=id)
-        if obj is None:
-            return JsonResponse({"error": "not found"})
-        obj.delete()
-        return JsonResponse(
-            {
-                "status": "success",
-                "code": 200,
-                "data": obj.to_json(),
-            }
-        )
+            raise Exception("not support http method")
+        try:
+            print("ids",ids)
+            find = self.find_by_user(self.model.objects.filter(pk__in=ids),request=request)
+            if find.count() == 0:
+                return ApiJsonResponse.error(ApiErrorCode.NOT_FOUND,"没有可以删除的数据/或者没有权限")
+            find.delete()
+            return ApiJsonResponse.success()
+        except Exception as e:
+            return ApiJsonResponse.error(message=e.__str__())
 
     @property
     def urls(self):

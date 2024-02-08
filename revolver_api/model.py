@@ -6,6 +6,10 @@ from logging import warn
 class SerializerModel(models.Model):
     class Meta:
         abstract = True
+        
+    def fillable(self):
+        excludes = ["id", "created_at", "updated_at", "is_deleted"]
+        return [f.name for f in self.get_fields() if f.name not in excludes]
 
     def convert(self,obj):
         # warn("【You should override this method】 convert %s" % obj,)
@@ -132,6 +136,9 @@ class SerializerModel(models.Model):
 
     def extra_json(self):
         return {}
+
+    def get_fields(self):
+        return [f for f in self._meta.get_fields() if f.is_relation is False]
 
     def foreignKeys(self):
         return [f for f in self._meta.get_fields() if f.is_relation]
