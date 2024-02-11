@@ -2,15 +2,14 @@ import datetime
 from functools import wraps
 import json
 from os import environ
+import os
 import re
 from typing import Any, Iterable
-from attr import has
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from .model import SerializerModel
 from .utils.get_request_args import get_instance_from_args_or_kwargs
 from .response import ApiErrorCode, ApiJsonResponse
 from .route import Router
-from core import config
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
@@ -456,7 +455,10 @@ class Api:
         model = query.model
         name = request.GET.get("name") or model.__name__.lower() + "_export_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M"))
         file_name = name + ".xls"
-        file_path = config.cache_dir("export_xls") / file_name
+        file_path = ("tmp")
+        if not os.path.exists(file_path):
+            os.makedirs(os.path.dirname(file_path))
+        file_path = os.path.join(file_path,file_name)
         print("export_csv",file_path)
         try:
             sheet = work.add_sheet("sheet1")
