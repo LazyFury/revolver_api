@@ -20,11 +20,11 @@ def errorHandler(json=True):
         json (bool, optional): _description_. Defaults to True.
     """
     def wrapper(func):
-        print("errorHandler",func.__name__)
+        # print("errorHandler",func.__name__)
         
         @wraps(func)
         def err_inner(*args, **kwargs):
-            print("errorHandler inner")
+            # print("errorHandler inner")
             try:
                 print("working fine....")
                 return func(*args, **kwargs)
@@ -231,7 +231,7 @@ class Api:
         Returns:
             _type_: _description_
         """
-        print(self.model, "validate")
+        # print(self.model, "validate")
         validator = self.Validator()
         for rule in self.rules:
             value = data or request.POST.get(rule.name)
@@ -395,7 +395,7 @@ class Api:
     def list(self, request: HttpRequest, **kwargs):
         if request.method != "GET":
             return JsonResponse({"error": "only support GET"})
-        print(self.model, "pageApi")
+        # print(self.model, "pageApi")
         if self.validate(request, **kwargs) is False:
             return JsonResponse({"error": "validate error"})
         page, size = request.GET.get("page", 1), request.GET.get("size", 10)
@@ -428,7 +428,7 @@ class Api:
         
     
     @staticmethod
-    def get_fields(model:SerializerModel):
+    def get_db_fields(model:SerializerModel):
         return model.objects.first().to_json().keys()
     
     @staticmethod
@@ -452,7 +452,7 @@ class Api:
             font: bold 1,height 240;')
         
         
-        model = query.model
+        model:SerializerModel = query.model
         name = request.GET.get("name") or model.__name__.lower() + "_export_" + str(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M"))
         file_name = name + ".xls"
         file_path = ("tmp")
@@ -467,13 +467,13 @@ class Api:
                 data.append(obj)
             if len(data) == 0:
                 return ApiJsonResponse.error(ApiErrorCode.NOT_FOUND,"没有找到记录")
-            fields = list(Api.get_fields(model))
+            fields = list(Api.get_db_fields(model))
             
             sorted_fields = sorted(fields,key=lambda k:model.xls_sort_key(k) )
             
             for i,field in enumerate(sorted_fields):
-                obj = data[0]
-                remark = model.get_json_key_remark(obj,field)
+                obj:SerializerModel = data[0]
+                remark = model.get_xls_key_remark(obj,field)
                 width = len(remark) * 400
                 width = max(width,3600)
                 sheet.col(i).width = width
@@ -529,11 +529,10 @@ class Api:
         if request.method != "DELETE":
             raise Exception("not support http method")
         try:
-            print("ids",ids)
-            find = self.find_by_user(self.model.objects.filter(pk__in=ids),request=request)
-            if find.count() == 0:
-                return ApiJsonResponse.error(ApiErrorCode.NOT_FOUND,"没有可以删除的数据/或者没有权限")
-            find.delete()
+            for id in ids:
+                obj = self.find_by_user(self.model.objects.filter(pk=id),request=request).first()
+                if obj is not None:
+                    obj.delete()
             return ApiJsonResponse.success()
         except Exception as e:
             return ApiJsonResponse.error(message=e.__str__())

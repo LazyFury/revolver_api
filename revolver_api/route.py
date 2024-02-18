@@ -3,6 +3,8 @@ import inspect
 from os import environ
 from django.http import HttpRequest
 from django.urls import re_path
+
+from revolver_api.revolver_api.model import SerializerModel
 from .utils.get_request_args import  get_instance_from_args_or_kwargs
 from .response import ApiErrorCode, ApiJsonResponse
 
@@ -90,9 +92,9 @@ class Router():
     
     def resource(self,baseUrl,middlewares=[],**kwargs):
         def wrapper(obj):
-            o =  obj()
+            o:SerializerModel =  obj()
             if hasattr(o,"register"):
-                print("register",baseUrl,middlewares)
+                # print("register",baseUrl,middlewares)
                 o.register(self,baseUrl,middlewares=middlewares,**kwargs)
         return wrapper
     

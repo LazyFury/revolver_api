@@ -8,10 +8,30 @@ class SerializerModel(models.Model):
         abstract = True
         
     def fillable(self):
-        excludes = ["id", "created_at", "updated_at", "is_deleted"]
-        return [f.name for f in self.get_fields() if f.name not in excludes]
+        """ 可填充字段
+
+        Returns:
+            _type_: 返回可填充字段列表
+        """
+        return [f.name for f in self.get_fields() if f.name not in self.exclude_fillable()]
+    
+    def exclude_fillable(self):
+        """ 不可填充字段
+
+        Returns:
+            _type_: 返回不可填充字段列表
+        """
+        return ["id", "created_at", "updated_at", "is_deleted"]
 
     def convert(self,obj):
+        """ 转换为json时处理特殊类型
+
+        Args:
+            obj (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         # warn("【You should override this method】 convert %s" % obj,)
         # bool 
         if isinstance(obj,bool):
@@ -25,9 +45,19 @@ class SerializerModel(models.Model):
         return obj if isinstance(obj,str) else obj.__str__()
     
     def to_json(self, *args, **kwargs):
+        """ 转换为json
+
+        Returns:
+            _type_: _description_
+        """
         return self.sample_to_json(*args, **kwargs)
     
-    def json_key_remark(self):
+    def xls_key_mapping(self):
+        """ xls key 映射
+
+        Returns:
+            _type_: _description_
+        """
         return {
             "id": "ID",
             "created_at": "创建时间",
@@ -37,6 +67,15 @@ class SerializerModel(models.Model):
     
     @staticmethod
     def to_xls_format(obj,key):
+        """ 转换为xls格式
+
+        Args:
+            obj (_type_): _description_
+            key (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         if key not in obj:
             return "-"
         val = obj.get(key,"/")
@@ -56,13 +95,29 @@ class SerializerModel(models.Model):
             return val if val != "" else "/"
         return val.__str__() if val is not None else "/"
     
-    def get_json_key_remark(self, key):
-        return self.json_key_remark().get(key, key)
+    def get_xls_key_remark(self, key):
+        """ 获取xls key 备注
+
+        Args:
+            key (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        return self.xls_key_mapping().get(key, key)
 
     
     
     @staticmethod
     def xls_sort_key(key):
+        """ xls 排序key
+
+        Args:
+            key (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         return {
             "id": 0,
             "created_at": 1,
@@ -70,7 +125,7 @@ class SerializerModel(models.Model):
             "is_deleted": 3,
         }.get(key, 999)
 
-    def loop_all_self_attr(
+    def serialize(
         self, with_foreign=True, with_related=False, related_serializer=False
     ):
         """遍历所有属性
@@ -78,40 +133,41 @@ class SerializerModel(models.Model):
         Returns:
             _type_: _description_
         """
-        for key in self.__dict__:
+        for field in self.get_fields():
+            key = field.name
             if hasattr(self, key):
-                if key == "_state":
-                    continue
                 res = getattr(self, key)
-                # test type res
-                
                 yield key, self.convert(res) if res is not None else None
+                
+        # foreign_ids 
+        for field in self.foreign_fields():
+            key = f"{field.name}_id"
+            if hasattr(self, key):
+                res = getattr(self, key)
+                yield key, self.convert(res) if res is not None else None
+                
+                
         # print(self.foreignKeys())
-        for fKey in self.foreignKeys():
-            if hasattr(self, fKey.name) and with_foreign is True:
-                foreign = getattr(self, fKey.name)
+        for field in self.foreign_fields():
+            if hasattr(self, field.name) and with_foreign is True:
+                foreign:SerializerModel = getattr(self, field.name)
                 # print("foreign", fKey.name, foreign)
                 # one to one
                 if hasattr(foreign, "sample_to_json"):
                     yield (
-                        fKey.name,
-                        getattr(self, fKey.name).sample_to_json(
+                        field.name,
+                        foreign.sample_to_json(
                             with_foreign=True,
                             related_serializer=False,
                             with_related=True,
                         ),
                     )
                 else:
-                    # res = getattr(self, fKey.name)
-                    # yield (
-                    #     fKey.name,
-                    #     res.__str__() if res is not None else None,
-                    # )
                     # 可能是被别的对象引用或者 None ，被别的对象引用的话，这里是一个 RelatedManager 对象,不适合自动处理
-                    yield (fKey.name, None)
+                    yield (field.name, None)
             # related one to many
-            if fKey.related_model is not None and with_related is True:
-                related = fKey.related_model
+            if field.related_model is not None and with_related is True:
+                related:SerializerModel = field.related_model
                 # print(self.__class__.__name__, fKey.name, related.__class__.__name__)
                 arr = []
                 if hasattr(related, self.__class__.__name__.lower()) is False:
@@ -131,8 +187,8 @@ class SerializerModel(models.Model):
                             )
                             continue
                         arr.append(item.__str__())
-                yield fKey.name, arr
-                yield fKey.name + "_count", len(arr)
+                yield field.name, arr
+                yield field.name + "_count", len(arr)
 
     def extra_json(self):
         return {}
@@ -140,7 +196,7 @@ class SerializerModel(models.Model):
     def get_fields(self):
         return [f for f in self._meta.get_fields() if f.is_relation is False]
 
-    def foreignKeys(self):
+    def foreign_fields(self):
         return [f for f in self._meta.get_fields() if f.is_relation]
 
     def exclude_json_keys(self):
@@ -160,13 +216,14 @@ class SerializerModel(models.Model):
         """
         result = {
             key: value
-            for key, value in self.loop_all_self_attr(
+            for key, value in self.serialize(
                 with_foreign=with_foreign,
                 with_related=with_related,
                 related_serializer=related_serializer,
             )
         }
 
+        # merge extra key 
         for key, value in self.extra_json().items():
             if merge_force is True:
                 result[key] = value
@@ -175,8 +232,11 @@ class SerializerModel(models.Model):
                     result[key] = value
                 else:
                     warn("key %s is exists" % key)
+                    
+        # del exclude key 
         for key in self.exclude_json_keys():
             if result.keys().__contains__(key):
                 del result[key]
+                
         return result
 
