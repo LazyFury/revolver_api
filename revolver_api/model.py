@@ -135,7 +135,7 @@ class SerializerModel(models.Model):
         """
         for field in self.get_fields():
             key = field.name
-            if hasattr(self, key):
+            if hasattr(self, key) and key not in self.exclude_json_keys():
                 res = getattr(self, key)
                 yield key, self.convert(res) if res is not None else None
                 
@@ -232,11 +232,6 @@ class SerializerModel(models.Model):
                     result[key] = value
                 else:
                     warn("key %s is exists" % key)
-                    
-        # del exclude key 
-        for key in self.exclude_json_keys():
-            if result.keys().__contains__(key):
-                del result[key]
                 
         return result
 
