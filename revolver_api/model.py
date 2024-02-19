@@ -50,7 +50,7 @@ class SerializerModel(models.Model):
         Returns:
             _type_: _description_
         """
-        return self.sample_to_json(*args, **kwargs)
+        return self.sample_to_json(with_foreign=False,*args, **kwargs)
     
     def xls_key_mapping(self):
         """ xls key 映射
@@ -149,7 +149,7 @@ class SerializerModel(models.Model):
                 
         # print(self.foreignKeys())
         for field in self.foreign_fields():
-            if hasattr(self, field.name) and with_foreign is True:
+            if hasattr(self, field.name) and with_foreign is True and field.name not in self.exclude_json_keys():
                 foreign:SerializerModel = getattr(self, field.name)
                 # print("foreign", fKey.name, foreign)
                 # one to one

@@ -11,7 +11,7 @@ from .utils.get_request_args import get_instance_from_args_or_kwargs
 from .response import ApiErrorCode, ApiJsonResponse
 from .route import Router
 from django.db import models
-from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import AbstractUser,AnonymousUser
 
 def errorHandler(json=True):
     """api 错误处理
@@ -164,9 +164,11 @@ class Api:
         Returns:
             _type_: _description_
         """
-        data = {
-            self.user_field:user
-        }
+        data = {}
+        if not isinstance(user,AnonymousUser):
+            data = {
+                self.user_field:user
+            }
         return query.filter(**data)
     
     def find_by_user(self,query: models.QuerySet,request: HttpRequest,view_only=False)->models.QuerySet:
@@ -199,14 +201,15 @@ class Api:
             obj (models.Model): _description_
         """
         if self.shoud_find_by_user:
-            print("has user field",hasattr(obj,"user"))
+            user_field  = self.user_field
+            print("has user field",hasattr(obj,user_field))
             print("user",request.user)
             # superuser 在后台手动选择用户时，不会自动保存用户
             if self.is_supperuser(request):
-                if (hasattr(obj,"user") is False or getattr(obj,"user") is None):
-                    setattr(obj,"user",request.user)
+                if (hasattr(obj,user_field) is False or getattr(obj,user_field) is None):
+                    setattr(obj,user_field,request.user)
             else:
-                setattr(obj,"user",request.user)
+                setattr(obj,user_field,request.user)
         obj.save()
     
     class Validator:
