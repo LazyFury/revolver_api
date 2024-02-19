@@ -40,6 +40,10 @@ class SerializerModel(models.Model):
         if isinstance(obj,int):
             return obj
         # none 
+        if isinstance(obj,dict):
+            return obj
+        if isinstance(obj,list):
+            return obj
         if obj is None:
             return obj
         return obj if isinstance(obj,str) else obj.__str__()
