@@ -13,7 +13,8 @@ class SerializerModel(models.Model):
         Returns:
             _type_: 返回可填充字段列表
         """
-        return [f.name for f in self.get_fields() if f.name not in self.exclude_fillable()]
+        f_ids = [f.name + "_id" for f in self.foreign_fields()]
+        return [f.name for f in self.get_fields() if f.name not in self.exclude_fillable()] + f_ids
     
     def exclude_fillable(self):
         """ 不可填充字段
@@ -97,6 +98,10 @@ class SerializerModel(models.Model):
             return val
         if isinstance(val,str):
             return val if val != "" else "/"
+        if isinstance(val,dict):
+            return None
+        if isinstance(val,list):
+            return None
         return val.__str__() if val is not None else "/"
     
     def get_xls_key_remark(self, key):
