@@ -55,9 +55,10 @@ class Rule:
     message: str = ""
     validator = bool = lambda *args, **kwargs: True
 
-    def __init__(self,name, message="", **kwargs):
+    def __init__(self,name, message="",required=True, **kwargs):
         self.name = name
         self.message = message
+        self.required = required
         for key in kwargs:
             setattr(self, key, kwargs[key])
             
@@ -100,6 +101,7 @@ def validator(rules: Iterable[Rule]=[],method="get"):
                 if req.headers.get("Content-Type") == "application/json":
                     try:
                         params = json.loads(req.body)
+                        print("get body")
                     except Exception as e:
                         return ApiJsonResponse.error(ApiErrorCode.ERROR,"json 解析错误")
             
@@ -128,6 +130,7 @@ class Api:
 
     public_view = False
     user_field = "user"
+    disable_delete = False
     
     @property
     def shoud_find_by_user(self):
@@ -211,64 +214,7 @@ class Api:
             else:
                 setattr(obj,user_field,request.user)
         obj.save()
-    
-    class Validator:
-        is_valid = True
-        errors = {}
 
-        @property
-        def tips(self):
-            for key in self.errors:
-                return self.errors[key]
-
-        def add_error(self, key, value):
-            self.is_valid = False
-            self.errors[key] = value
-
-    def validate(self, request: HttpRequest, data=None,**kwargs):
-        """### 提交数据验证
-
-        Args:
-            request (HttpRequest): _description_
-
-        Returns:
-            _type_: _description_
-        """
-        # print(self.model, "validate")
-        validator = self.Validator()
-        for rule in self.rules:
-            value = data or request.POST.get(rule.name)
-            if rule.required is True and (value is None or value == ""):
-                validator.add_error(
-                    rule.name, rule.message if rule.message else "required"
-                )
-                continue
-            if rule.type == "string":
-                value = value if value else ""
-                if rule.max_length > 0 and len(value) > rule.max_length:
-                    validator.add_error(rule.name, f"max_length {rule.max_length}")
-                    continue
-                if rule.min_length > 0 and len(value) < rule.min_length:
-                    validator.add_error(rule.name, f"min_length {rule.min_length}")
-                    continue
-            if rule.type == "number":
-                value = int(value if value else 0)
-                if rule.max > 0 and value > rule.max:
-                    validator.add_error(rule.name, f"max {rule.max}")
-                    continue
-                if rule.min > 0 and value < rule.min:
-                    validator.add_error(rule.name, f"min {rule.min}")
-                    continue
-            if rule.type == "choices":
-                if value not in rule.choices:
-                    validator.add_error(rule.name, f"choices is not in {rule.choices}")
-                    continue
-            if rule.validator(value) is False:
-                validator.add_error(
-                    rule.name, rule.message if rule.message else "自定义验证错误"
-                )
-                continue
-        return validator
 
     def create(self, request: HttpRequest, **kwargs):
         """### 创建数据
@@ -291,14 +237,6 @@ class Api:
             data = json.loads(request.body)
         except Exception as e:
             return ApiJsonResponse.error(ApiErrorCode.ERROR,e.__str__())
-        validator = self.validate(request,data=data, **kwargs)
-        if validator.is_valid is False:
-            return ApiJsonResponse.error(
-                data={
-                    "errors": validator.errors,
-                },
-                message= validator.tips if validator.tips else "",
-            )
         try:
             dict = data
             if id in dict:
@@ -329,14 +267,6 @@ class Api:
             data = json.loads(request.body)
         except Exception as e:
             return ApiJsonResponse.error(data={},message=e.__str__() or "json 解析错误")
-        validator = self.validate(request,data=data, **kwargs)
-        if validator.is_valid is False:
-            return ApiJsonResponse.error(
-                data={
-                    "errors": validator.errors,
-                },
-                message= validator.tips if validator.tips else "",
-            )
         id = data.get("id")
         if id is None or id == "":
             return ApiJsonResponse.error(ApiErrorCode.ERROR,"id 不能为空")
@@ -398,9 +328,6 @@ class Api:
     def list(self, request: HttpRequest, **kwargs):
         if request.method != "GET":
             return JsonResponse({"error": "only support GET"})
-        # print(self.model, "pageApi")
-        if self.validate(request, **kwargs) is False:
-            return JsonResponse({"error": "validate error"})
         page, size = request.GET.get("page", 1), request.GET.get("size", 10)
         page = int(page)
         size = int(size)
@@ -523,10 +450,9 @@ class Api:
             }
         )
 
-    @validator([
-        Rule(name="ids",message="ids 必传！")
-    ])
     def delete(self, request: HttpRequest):
+        if self.disable_delete:
+            return ApiJsonResponse.error(ApiErrorCode.ERROR,"不支持删除")
         data = json.loads(request.body)
         ids = data.get("ids",[])
         if request.method != "DELETE":
@@ -552,10 +478,27 @@ class Api:
         pass
     
     def register(self,router:Router,baseUrl="api",middlewares=[]):
+        # list 
         router.get(baseUrl,middlewares=middlewares)(self.list)
-        router.post(baseUrl + '.create',middlewares=middlewares)(self.create)
+        # create 
+        router.post(baseUrl + '.create',middlewares=middlewares)(
+            validator(self.rules,method="post")(self.create)
+        )
+        # detail 
         router.get(baseUrl + '.detail',middlewares=middlewares)(self.detail)
-        router.delete(baseUrl + '.delete',middlewares=middlewares)(self.delete)
-        router.put(baseUrl + '.update',middlewares=middlewares)(self.update)
+        # del 
+        router.delete(baseUrl + '.delete',middlewares=middlewares)(
+            validator([
+                Rule(name="ids",message="ids 必传！")
+            
+            ],method="delete")(self.delete)
+        )
+        # update  
+        router.put(baseUrl + '.update',middlewares=middlewares)(
+            validator(self.rules + [
+                Rule(name="id", required=True, message="id不能为空"),   
+            ],method="put")(self.update)
+        )
+        # export 
         router.get(baseUrl + '.export',middlewares=middlewares)(self.export_csv)
     
