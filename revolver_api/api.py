@@ -271,10 +271,10 @@ class Api:
         if id is None or id == "":
             return ApiJsonResponse.error(ApiErrorCode.ERROR,"id 不能为空")
         query = self.find_by_user(query=self.model.objects.filter(pk=id),request=request)
-        print("update",query.count())
+        # print("update",query.count())
         # .first()
         obj = query.first()
-        print("update",obj)
+        # print("update",obj)
         
         if obj is None:
             return ApiJsonResponse.error(ApiErrorCode.NOT_FOUND,"无法更新/没有权限")
