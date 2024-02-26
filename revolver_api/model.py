@@ -243,4 +243,22 @@ class SerializerModel(models.Model):
                     warn("key %s is exists" % key)
                 
         return result
+    
+    
+    
+    
+    def save(self, *args, **kwargs):
+        """ 保存
+
+        Returns:
+            _type_: _description_
+        """
+        # foreign_id is "" set to None
+        for field in self.foreign_fields():
+            key = f"{field.name}_id"
+            if hasattr(self, key):
+                res = getattr(self, key)
+                if res == "":
+                    setattr(self, key, None)
+        super().save(*args, **kwargs)
 
