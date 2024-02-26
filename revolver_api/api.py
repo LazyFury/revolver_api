@@ -1,3 +1,4 @@
+from calendar import c
 import datetime
 from functools import wraps
 import json
@@ -362,7 +363,7 @@ class Api:
         return model.objects.first().to_json().keys()
     
     @staticmethod
-    def export_csv_override(query:models.QuerySet,request:HttpRequest):
+    def export_xls_override(query:models.QuerySet,request:HttpRequest):
         """导出csv
 
         Args:
@@ -424,9 +425,30 @@ class Api:
             response['Content-Disposition'] = 'attachment; filename="export.xls"'
             return response
         
+    def export_xls(self,request: HttpRequest):
+        query = self.defaultQuery(request)
+        return self.export_xls_override(query,request)
+    
     def export_csv(self,request: HttpRequest):
         query = self.defaultQuery(request)
-        return self.export_csv_override(query,request)
+        data = []
+        for obj in query:
+            data.append(obj.to_json())
+        if len(data) == 0:
+            return ApiJsonResponse.error(ApiErrorCode.NOT_FOUND,"没有找到记录")
+        fields = list(Api.get_db_fields(self.model))
+        sorted_fields = sorted(fields,key=lambda k:self.model.xls_sort_key(k))
+        # print("sorted_fields",sorted_fields)
+        import csv
+        import io
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=sorted_fields)
+        writer.writeheader()
+        for row in data:
+            writer.writerow(row)
+        response = HttpResponse(output.getvalue(), content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="export.csv"'
+        return response
 
     @validator([
         Rule(name="id", required=True, message="id不能为空"),
